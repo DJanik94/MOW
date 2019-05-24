@@ -81,7 +81,41 @@ train_index  <- sample(seq_len(nrow(dat)), size = training_set_size)
 
 
 
-  # -----------------Calculate correlation --------------------
-#M <- cor(dat_shaped)
-#head(round(M,2))
+  # ------------------------------------
+  
+  
+  dat_shaped <- as.data.table(dataPreparation::shapeSet(dat, finalForm = 'numerical_matrix', verbose =TRUE))
+  dat_shaped <-subset(dat_shaped, select = -c(AttritionNo))
+  names(dat_shaped) <- str_replace_all(names(dat_shaped), c(" " = "_", "," = "", "&" = ""))
+  M <- cor(dat_shaped)
+  head(round(M,2))
+  corrplot(M, main = '\n\n Correlation plot for Numeric Variables',
+           method = "number")
+  
+  #Split data into 3 sets
+  training_set_size = 1:round(0.6*nrow(dat))
+  validation_set_size = round(0.6*nrow(dat))+1:round(0.2*nrow(dat))
+  test_set_size = round(0.6*nrow(dat))+round(0.2*nrow(dat))+1: round(0.2*nrow(dat))
+  
+  training_set = dat_shaped[training_set_size,]
+  validation_set = dat_shaped[validation_set_size,]
+  
+  glm_for_set = stats::glm(formula = AttritionYes~., data = training_set)
+  pred_glm <- predict(glm_for_set, newdata = validation_set, method = "glm.fit")
+  pred_glm <- round(pred_glm)
+  conf_matrix_glm <- caret::confusionMatrix(table(pred_glm, validation_set$AttritionYes))
+  print(conf_matrix_glm)
+  
+  ## ----------------- ANN --------------------
+  #answer_ann <- subset(dat_shaped, select = c(AttritionYes))
+  #substet_ann <- subset(dat_shaped, select = -c(AttritionYes))
+  #training_set_ann <- substet_ann[training_set_size,]
+  #validation_set = substet_ann[validation_set_size,]
+  #ann_for_set = RSNNS::mlp(x = training_set_ann, y = answer_ann, size = c(4), maxit = 100, initFunc = "Randomize_Weights", initFuncParams = c(-0.3, 0.3),
+  #                         learnFunc = "Std_Backpropagation")
+  #pred_ann <- predict(ann_for_set, newdata = validation_set, type = 'response')
+  #pred_ann <- round(pred_ann)
+  #conf_matrix_ann <- caret::confusionMatrix(table(pred_ann, validation_set$AttritionYes))
+  #print(conf_matrix_ann)
+  
   
