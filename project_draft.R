@@ -6,6 +6,7 @@ library(caret)
 library(randomForest)
 library('e1071')
 library(dplyr)
+library(Boruta)
 # ---------------- Data read -------------
 #setwd('C:/Users/Gabrysia/git_mow')
 setwd('~/Studia/SEM2/MOW/Projekt/MOW')
@@ -46,7 +47,12 @@ varImpPlot(feature_selection_rf)
 features_sorted <- as.character(forest_summary_sorted$names)
 features_num <- c(10, 15, 20, 30)
 
-#----RANDOM FOREST PREDICTION----------------
+#---Feature selection using Boruta algorithm
+boruta_summary <- Boruta(Attrition~., data = training_set, doTrace = 2, maxRuns = 1000)
+print(boruta_summary)
+plot(boruta_summary, xlab = "", ylab = "Importance", las = 2)
+
+  #----RANDOM FOREST PREDICTION----------------
 for (f_num in features_num) {
   rf_training_subset <- subset(training_set, select = c("Attrition", features_sorted[1:f_num]))
   rf_validation_subset <- subset(validation_set, select = c("Attrition", features_sorted[1:f_num]))
