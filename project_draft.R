@@ -7,15 +7,25 @@ library(randomForest)
 library('e1071')
 library(dplyr)
 library(Boruta)
+library(BBmisc)
 # ---------------- Data read -------------
-setwd('C:/Users/Gabrysia/git_mow')
+#setwd('C:/Users/Gabrysia/git_mow')
+setwd('~/Studia/SEM2/MOW/Projekt/MOW')
+
 
 dat <- read.csv("WA_Fn-UseC_-HR-Employee-Attrition.csv", header=TRUE)
 dat <-subset(dat, select = -c(Over18, StandardHours, EmployeeCount, EmployeeNumber))
 
+sapply(dat, class)
+
+
+
 # -------- Data preparation --------------
 incomplete_count <- toString(sum(!complete.cases(dat)))
 print(paste("Incomplete cases:", incomplete_count, sep = " "))
+
+#Normalize continous values
+dat_normalized <- normalize(dat, method = "range", range = c(0, 1))
 
 ####
 split_ratio <- c(0.6, 0.2, 0.2)
@@ -51,6 +61,17 @@ varImpPlot(feature_selection_rf)
 features_sorted <- as.character(forest_summary_sorted$names)
 features_num <- c(10, 15, 20, 26)
 
+#-----Feature selection using Boruta algorithm-----
+boruta_summary <- Boruta(Attrition~., data = training_set, doTrace = 2, maxRuns = 500)
+print(boruta_summary)
+plot(boruta_summary, xlab = "", ylab = "Importance", las = 2)
+boruta_attributes <- getSelectedAttributes(boruta_summary)
+getConfirmedFormula(boruta_summary)
+getNonRejectedFormula(boruta_summary)
+attStats(boruta_summary)
+
+boruta_training <- subset(training_set, select = c("Attrition", boruta_attributes))
+
 #----RANDOM FOREST PREDICTION----------------
 trees_num <- c(500, 700, 1500)
 rf_best_accuracy <- c(0.0 )
@@ -76,6 +97,11 @@ for (f_num in features_num) {
 cat(sprintf("Confusion matrix for the best random forest model with %s features, %s trees
               \n Confusion matrix: \n", rf_best_parameters[1], rf_best_parameters[2]))
 print(rf_best_confm)
+
+
+
+
+
 
 for (f_num in features_num)
 {
