@@ -6,6 +6,7 @@ library(caret)
 library(randomForest)
 library('e1071')
 library(dplyr)
+library(Boruta)
 # ---------------- Data read -------------
 setwd('C:/Users/Gabrysia/git_mow')
 
@@ -31,6 +32,12 @@ validation_set  = temp_set[v_indices,]
 testing_set = temp_set[-v_indices,]
 
 #--Feature selection using random forest----
+# set.seed(456)
+# boruta_summary <- Boruta(Attrition~., data = training_set, doTrace = 2)
+# print(boruta_summary)
+# plot(boruta_summary)
+training_set <- subset(training_set, select = -c(PerformanceRating, Gender, Department, BusinessTravel))
+validation_set <- subset(validation_set, select = -c(PerformanceRating, Gender, Department, BusinessTravel))
 
 feature_selection_rf <- randomForest(formula = Attrition~., data = training_set)
 print(summary(feature_selection_rf))
@@ -41,26 +48,34 @@ forest_summary_sorted <- forest_summary[order(forest_summary$overall, decreasing
 rownames(forest_summary_sorted) <- NULL
 varImpPlot(feature_selection_rf)
 
-
 features_sorted <- as.character(forest_summary_sorted$names)
-features_num <- c(10, 15, 20, 30)
+features_num <- c(10, 15, 20, 26)
 
 #----RANDOM FOREST PREDICTION----------------
+trees_num <- c(500, 700, 1500)
+rf_best_accuracy <- c(0.0 )
+rf_best_parameters <- c(NULL,NULL)
+rf_best_confm <- NULL
 for (f_num in features_num) {
   rf_training_subset <- subset(training_set, select = c("Attrition", features_sorted[1:f_num]))
   rf_validation_subset <- subset(validation_set, select = c("Attrition", features_sorted[1:f_num]))
-  rf_model <- randomForest(formula = Attrition~., data = rf_training_subset)
-  rf_pred <- predict(rf_model, newdata = rf_validation_subset, type = 'response')
-  rf_confm <- caret::confusionMatrix(rf_pred, rf_validation_subset$Attrition)
-  cat(sprintf("Confusion matrix for random forest model with %s features\n", f_num))
-  print(rf_confm)
+  for (t_num in trees_num){
+    rf_model <- randomForest(formula = Attrition~., data = rf_training_subset, ntree = t_num)
+    rf_pred <- predict(rf_model, newdata = rf_validation_subset, type = 'response')
+    rf_confm <- caret::confusionMatrix(rf_pred, rf_validation_subset$Attrition)
+    if (rf_confm$overall['Accuracy'] > rf_best_accuracy){
+      rf_best_accuracy <- rf_confm$overall['Accuracy']
+      rf_best_parameters <- c(f_num, t_num)
+      rf_best_confm <- rf_confm
+    }
+    #cat(sprintf("Confusion matrix for random forest model with %s features\n and %s trees", f_num, t_num))
+    #print(rf_confm)
+    cat(sprintf("Accuracy for model with %s features and %s trees: %s \n", f_num, t_num,rf_confm$overall['Accuracy']  ))
+  }
 }
-
-  
-#----wplyw wyboru atrybytow------
-  
-#-----wplyw parametrow-----------
-
+cat(sprintf("Confusion matrix for the best random forest model with %s features, %s trees
+              \n Confusion matrix: \n", rf_best_parameters[1], rf_best_parameters[2]))
+print(rf_best_confm)
 
 for (f_num in features_num)
 {
@@ -88,7 +103,7 @@ glm_pred <- round(glm_pred)
 glm_confm <- caret::confusionMatrix(table(glm_pred, numeric_val_subset$AttritionYes))
 print(glm_confm)
 
-#SOME CODE GOES HERE
+#SOME CODE GOES HERE--
 
 }
 
