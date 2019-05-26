@@ -7,7 +7,8 @@ library(randomForest)
 library('e1071')
 library(dplyr)
 # ---------------- Data read -------------
-setwd('C:/Users/Gabrysia/git_mow')
+#setwd('C:/Users/Gabrysia/git_mow')
+setwd('~/Studia/SEM2/MOW/Projekt/MOW')
 
 dat <- read.csv("WA_Fn-UseC_-HR-Employee-Attrition.csv", header=TRUE)
 dat <-subset(dat, select = -c(Over18, StandardHours, EmployeeCount, EmployeeNumber))
