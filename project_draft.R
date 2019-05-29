@@ -9,6 +9,11 @@ library(dplyr)
 library(Boruta)
 library(BBmisc)
 library(rlist)
+library(pROC)
+library(mlr)
+library(plotROC)
+library(fakeR)
+
 # ---------------- Data read -------------
 #setwd('C:/Users/Gabrysia/git_mow')
 setwd('~/Studia/SEM2/MOW/Projekt/MOW')
@@ -31,9 +36,9 @@ dat_normalized <- normalize(dat, method = "range", range = c(0, 1))
 ####
 split_ratio <- c(0.6, 0.2, 0.2)
 
-training_set_size = round(split_ratio[1]*nrow(dat))
-validation_set_size = round(split_ratio[2]*nrow(dat))
-test_set_size = round(split_ratio[3]*nrow(dat))
+training_set_size <- round(split_ratio[1]*nrow(dat))
+validation_set_size <- round(split_ratio[2]*nrow(dat))
+test_set_size <- round(split_ratio[3]*nrow(dat))
 
 tr_indices  <- sample(seq_len(nrow(dat)), size = training_set_size)
 training_set <- dat[tr_indices,]
@@ -116,6 +121,9 @@ names(numeric_val_subset) <- str_replace_all(names(numeric_val_subset), c(" " = 
 M <- cor(numeric_val_subset)
 head(round(M,2))
 
+rf_roc <- roc(AttritionYes ~ rf_pred, data = numeric_val_subset)
+plot(rf_roc, xlim=c(1,0), ylim = c(0,1))
+
 
 # -------------- GLM -----------------
   
@@ -125,6 +133,8 @@ glm_pred <- round(glm_pred)
 glm_confm <- caret::confusionMatrix(table(glm_pred, numeric_val_subset$AttritionYes))
 print(glm_confm)
 
+glm_roc <- roc(AttritionYes ~ glm_pred, data = numeric_val_subset)
+plot(glm_roc, xlim=c(1,0), ylim = c(0,1))
 
 # -------------- ANN -  -----------------
 ann_training_desired_output <- subset(numeric_tr_subset, select = c(AttritionYes))
@@ -156,7 +166,8 @@ ann_model_2 <- RSNNS::mlp(x = ann_training_input,
                          linOut = FALSE)
 ann_predictions <- list()
 ann_conf_matrices <- list()
-ann_models <- list(ann_model_1, ann_model_2)
+ann_ROCs <- list()
+ann_models <- list( ann_model_2)
 
 for (model in ann_models){
   
@@ -171,6 +182,12 @@ for (model in ann_models){
   ann_confm <- caret::confusionMatrix(ann_pred$V1,  ann_validation_desired_output$AttritionYes)
   print(ann_confm)
   list.append(ann_conf_matrices,  ann_confm)
+  
+  ann_roc <- roc(model ~ ann_pred$V1, data = ann_validation_input)
+  plot(ann_roc)
+  
+  
+  
 }
 
 
