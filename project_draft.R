@@ -8,6 +8,7 @@ library('e1071')
 library(dplyr)
 library(Boruta)
 library(BBmisc)
+library(rlist)
 # ---------------- Data read -------------
 #setwd('C:/Users/Gabrysia/git_mow')
 setwd('~/Studia/SEM2/MOW/Projekt/MOW')
@@ -95,15 +96,21 @@ print(rf_best_confm)
 
 
 #----------Numeric data preparation-----------
-numeric_tr_subset <- as.data.table(dataPreparation::shapeSet(boruta_training,
-                                  finalForm = 'numerical_matrix', verbose =TRUE))
+numeric_tr_subset <- normalize(as.data.table(dataPreparation::shapeSet(boruta_training,
+                                  finalForm = 'numerical_matrix',
+                                  verbose =TRUE)),
+                               method = "range",
+                               range = c(0, 1))
 numeric_tr_subset <-subset(numeric_tr_subset, select = -c(AttritionNo))
 names(numeric_tr_subset) <- str_replace_all(names(numeric_tr_subset), c(" " = "_", "," = "", "&" = ""))
 M <- cor(numeric_tr_subset)
 head(round(M,2))
 
-numeric_val_subset <- as.data.table(dataPreparation::shapeSet(boruta_training,
-                                  finalForm = 'numerical_matrix', verbose =TRUE))
+numeric_val_subset <- normalize(as.data.table(dataPreparation::shapeSet(boruta_validation,
+                                  finalForm = 'numerical_matrix',
+                                  verbose =TRUE)),
+                                method = "range",
+                                range = c(0, 1))
 numeric_val_subset <-subset(numeric_val_subset, select = -c(AttritionNo))
 names(numeric_val_subset) <- str_replace_all(names(numeric_val_subset), c(" " = "_", "," = "", "&" = ""))
 M <- cor(numeric_val_subset)
@@ -119,17 +126,55 @@ glm_confm <- caret::confusionMatrix(table(glm_pred, numeric_val_subset$Attrition
 print(glm_confm)
 
 
-# -------------- ANN -----------------
+# -------------- ANN -  -----------------
 ann_training_desired_output <- subset(numeric_tr_subset, select = c(AttritionYes))
 ann_training_input <- subset(numeric_tr_subset, select = -c(AttritionYes))
 
 ann_validation_desired_output <- subset(numeric_val_subset, select = c(AttritionYes))
-ann_validation_input <- subset(numeric_val_subset, select = -c(AttritionYes))                                  
-ann_model = RSNNS::mlp(x = ann_training_input, y = ann_training_desired_output, size = c(4), maxit = 1000, 
-                      initFunc = "Randomize_Weights", initFuncParams = c(-0.3, 0.3),
-                      learnFunc = "Std_Backpropagation")
-ann_pred <- predict(ann_model, newdata = ann_validation_input)
-ann_confm <- caret::confusionMatrix(ann_pred, ann_validation_desired_output)
-print(ann_confm)
+ann_validation_desired_output$AttritionYes[ann_validation_desired_output == 0] <- "No"
+ann_validation_desired_output$AttritionYes[ann_validation_desired_output == 1] <- "Yes"
+ann_validation_desired_output$AttritionYes <- as.factor(ann_validation_desired_output$AttritionYes)
 
+ann_validation_input <- subset(numeric_val_subset, select = -c(AttritionYes))     
+
+ann_model_1 <- RSNNS::mlp(x = ann_training_input,
+                       y = ann_training_desired_output,
+                       size = c(4),
+                       maxit = 1000, 
+                      initFunc = "Randomize_Weights",
+                      initFuncParams = c(-0.3, 0.3),
+                      learnFunc = "Std_Backpropagation",
+                      linOut = FALSE)
+
+ann_model_2 <- RSNNS::mlp(x = ann_training_input,
+                         y = ann_training_desired_output,
+                         size = c(4),
+                         maxit = 1000, 
+                         initFunc = "Randomize_Weights",
+                         initFuncParams = c(-0.3, 0.3),
+                         learnFunc = "SCG",
+                         linOut = FALSE)
+ann_predictions <- list()
+ann_conf_matrices <- list()
+ann_models <- list(ann_model_1, ann_model_2)
+
+for (model in ann_models){
   
+  ann_pred <- (as.data.frame(round(predict(model, newdata = ann_validation_input))))
+  round(as.data.table(predict(model, newdata = ann_validation_input)))
+  
+  ann_pred$V1[ann_pred$V1 == 0] <- "No"
+  ann_pred$V1[ann_pred$V1 == 1] <- "Yes"
+  ann_pred$V1 <- as.factor(ann_pred$V1)
+  list.append(ann_predictions, ann_pred)
+  
+  ann_confm <- caret::confusionMatrix(ann_pred$V1,  ann_validation_desired_output$AttritionYes)
+  print(ann_confm)
+  list.append(ann_conf_matrices,  ann_confm)
+}
+
+
+
+
+
+    
