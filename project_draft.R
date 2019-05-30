@@ -12,12 +12,14 @@ library(rlist)
 library(pROC)
 library(mlr)
 library(plotROC)
-library(fakeR)
+library(boot)
 
 # ---------------- Data read -------------
 #setwd('C:/Users/Gabrysia/git_mow')
-setwd('~/Studia/SEM2/MOW/Projekt/MOW')
+#setwd('~/Studia/SEM2/MOW/Projekt/MOW')
+setwd('C:/Users/janikd01/Private/Studia/SEM2/MOW')
 
+set.seed(5993)
 
 dat <- read.csv("WA_Fn-UseC_-HR-Employee-Attrition.csv", header=TRUE)
 dat <-subset(dat, select = -c(Over18, StandardHours, EmployeeCount, EmployeeNumber))
@@ -47,7 +49,9 @@ v_indices <- sample(seq_len(nrow(temp_set)), size = validation_set_size)
 validation_set  = temp_set[v_indices,]
 testing_set = temp_set[-v_indices,]
 
-#--Feature selection using random forest----
+
+
+#--Feature selection with random forest----
 
 # feature_selection_rf <- randomForest(formula = Attrition~., data = training_set)
 # print(summary(feature_selection_rf))
@@ -71,26 +75,38 @@ getNonRejectedFormula(boruta_summary)
 attStats(boruta_summary)
 
 boruta_training <- subset(training_set, select = c("Attrition", boruta_attributes))
+#-------Generate some fake(recirds with Attrition === "YES")----------
+boruta_extended_with_filter <- subset(boruta_training, boruta_training$Attrition == "Yes")
+
+boruta_fake_training_data <- simulate_dataset(boruta_extended_with_filter, digits = 2, use.levels = TRUE)
+
+#boruta_training <- bind_rows (boruta_training, boruta_fake_training_data)
+
 boruta_validation <- subset(validation_set, select = c("Attrition", boruta_attributes))
 
 #----RANDOM FOREST PREDICTION----------------
 trees_num <- c(500, 700, 1500, 3000)
-features_num <- ncol(boruta_training)-1
+features_num <- (ncol(boruta_training))
 rf_best_accuracy <- c(0.0 )
 rf_best_trees_num <- NULL
 rf_best_confm <- NULL
 
   for (t_num in trees_num){
     rf_model <- randomForest(formula = Attrition~., data = boruta_training, ntree = t_num)
-    rf_pred <- predict(rf_model, newdata = boruta_validation, type = 'response')
-    rf_confm <- caret::confusionMatrix(rf_pred, boruta_validation$Attrition)
+    rf_pred_response <- predict(rf_model, boruta_validation, type = 'response')
+    rf_confm <- caret::confusionMatrix(rf_pred_response, boruta_validation$Attrition)
+    
+    rf_pred_prob <- as.data.frame(predict(rf_model, boruta_validation, type = 'prob'))
+    rf_roc <- roc(AttritionYes ~ rf_pred_prob$Yes, data = numeric_val_subset)
+    plot(rf_roc)
+    
     if (rf_confm$overall['Accuracy'] > rf_best_accuracy){
       rf_best_accuracy <- rf_confm$overall['Accuracy']
       rf_best_trees_num <- c(t_num)
       rf_best_confm <- rf_confm
     }
-    #cat(sprintf("Confusion matrix for random forest model with %s features\n and %s trees", f_num, t_num))
-    #print(rf_confm)
+    #cat(sprintf("Confusion matrix for random forest model with %s features\n and %s trees", features_num t_num))
+    print(rf_confm)
     cat(sprintf("Accuracy for model with %s features and %s trees: %s \n", features_num, t_num,rf_confm$overall['Accuracy']  ))
   }
 
@@ -121,16 +137,14 @@ names(numeric_val_subset) <- str_replace_all(names(numeric_val_subset), c(" " = 
 M <- cor(numeric_val_subset)
 head(round(M,2))
 
-rf_roc <- roc(AttritionYes ~ rf_pred, data = numeric_val_subset)
-plot(rf_roc, xlim=c(1,0), ylim = c(0,1))
+#rf_roc <- roc(AttritionYes ~ rf_pred, data = numeric_val_subset)
+#plot(rf_roc, xlim=c(1,0), ylim = c(0,1))
 
 
 # -------------- GLM -----------------
-  
-glm_model = stats::glm(formula = AttritionYes~., data = numeric_tr_subset)
-glm_pred <- predict(glm_model, newdata = numeric_val_subset, method = "glm.fit")
-glm_pred <- round(glm_pred)
-glm_confm <- caret::confusionMatrix(table(glm_pred, numeric_val_subset$AttritionYes))
+glm_model = cv.glm(formula = AttritionYes~., data = numeric_tr_subset,family = binomial, K = 10)
+glm_pred <- predict(glm_model, numeric_val_subset, type = 'response')
+glm_confm <- caret::confusionMatrix(table(round(glm_pred), numeric_val_subset$AttritionYes))
 print(glm_confm)
 
 glm_roc <- roc(AttritionYes ~ glm_pred, data = numeric_val_subset)
@@ -167,27 +181,28 @@ ann_model_2 <- RSNNS::mlp(x = ann_training_input,
 ann_predictions <- list()
 ann_conf_matrices <- list()
 ann_ROCs <- list()
-ann_models <- list( ann_model_2)
+ann_models <- list(ann_model_1, ann_model_2)
+
+
 
 for (model in ann_models){
   
-  ann_pred <- (as.data.frame(round(predict(model, newdata = ann_validation_input))))
-  round(as.data.table(predict(model, newdata = ann_validation_input)))
+  ann_pred <- predict(ann_model_1, ann_validation_input)
+  list.append(ann_predictions, ann_pred)
   
+  ann_roc <- roc(AttritionYes ~ glm_pred, data = numeric_val_subset)
+  list.append(ann_ROCs, ann_roc)
+  plot(ann_roc)
+  
+  ann_pred <- round(as.data.table(ann_pred))
   ann_pred$V1[ann_pred$V1 == 0] <- "No"
   ann_pred$V1[ann_pred$V1 == 1] <- "Yes"
   ann_pred$V1 <- as.factor(ann_pred$V1)
-  list.append(ann_predictions, ann_pred)
   
   ann_confm <- caret::confusionMatrix(ann_pred$V1,  ann_validation_desired_output$AttritionYes)
   print(ann_confm)
   list.append(ann_conf_matrices,  ann_confm)
-  
-  ann_roc <- roc(model ~ ann_pred$V1, data = ann_validation_input)
-  plot(ann_roc)
-  
-  
-  
+
 }
 
 
