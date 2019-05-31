@@ -75,14 +75,32 @@ getNonRejectedFormula(boruta_summary)
 attStats(boruta_summary)
 
 boruta_training <- subset(training_set, select = c("Attrition", boruta_attributes))
-#-------Generate some fake(recirds with Attrition === "YES")----------
-boruta_extended_with_filter <- subset(boruta_training, boruta_training$Attrition == "Yes")
-
-boruta_fake_training_data <- simulate_dataset(boruta_extended_with_filter, digits = 2, use.levels = TRUE)
-
-#boruta_training <- bind_rows (boruta_training, boruta_fake_training_data)
 
 boruta_validation <- subset(validation_set, select = c("Attrition", boruta_attributes))
+
+
+#----------Numeric data preparation-----------
+numeric_tr_subset <- normalize(as.data.table(dataPreparation::shapeSet(boruta_training,
+                                                                       finalForm = 'numerical_matrix',
+                                                                       verbose =TRUE)),
+                               method = "range",
+                               range = c(0, 1))
+numeric_tr_subset <-subset(numeric_tr_subset, select = -c(AttritionNo))
+names(numeric_tr_subset) <- str_replace_all(names(numeric_tr_subset), c(" " = "_", "," = "", "&" = ""))
+M <- cor(numeric_tr_subset)
+head(round(M,2))
+
+numeric_val_subset <- normalize(as.data.table(dataPreparation::shapeSet(boruta_validation,
+                                                                        finalForm = 'numerical_matrix',
+                                                                        verbose =TRUE)),
+                                method = "range",
+                                range = c(0, 1))
+numeric_val_subset <-subset(numeric_val_subset, select = -c(AttritionNo))
+names(numeric_val_subset) <- str_replace_all(names(numeric_val_subset), c(" " = "_", "," = "", "&" = ""))
+M <- cor(numeric_val_subset)
+head(round(M,2))
+
+
 
 #----RANDOM FOREST PREDICTION----------------
 trees_num <- c(500, 700, 1500, 3000)
@@ -116,33 +134,10 @@ print(rf_best_confm)
 
 
 
-#----------Numeric data preparation-----------
-numeric_tr_subset <- normalize(as.data.table(dataPreparation::shapeSet(boruta_training,
-                                  finalForm = 'numerical_matrix',
-                                  verbose =TRUE)),
-                               method = "range",
-                               range = c(0, 1))
-numeric_tr_subset <-subset(numeric_tr_subset, select = -c(AttritionNo))
-names(numeric_tr_subset) <- str_replace_all(names(numeric_tr_subset), c(" " = "_", "," = "", "&" = ""))
-M <- cor(numeric_tr_subset)
-head(round(M,2))
-
-numeric_val_subset <- normalize(as.data.table(dataPreparation::shapeSet(boruta_validation,
-                                  finalForm = 'numerical_matrix',
-                                  verbose =TRUE)),
-                                method = "range",
-                                range = c(0, 1))
-numeric_val_subset <-subset(numeric_val_subset, select = -c(AttritionNo))
-names(numeric_val_subset) <- str_replace_all(names(numeric_val_subset), c(" " = "_", "," = "", "&" = ""))
-M <- cor(numeric_val_subset)
-head(round(M,2))
-
-#rf_roc <- roc(AttritionYes ~ rf_pred, data = numeric_val_subset)
-#plot(rf_roc, xlim=c(1,0), ylim = c(0,1))
 
 
 # -------------- GLM -----------------
-glm_model = cv.glm(formula = AttritionYes~., data = numeric_tr_subset,family = binomial, K = 10)
+glm_model = glm(formula = AttritionYes~., data = numeric_tr_subset,family = binomial)
 glm_pred <- predict(glm_model, numeric_val_subset, type = 'response')
 glm_confm <- caret::confusionMatrix(table(round(glm_pred), numeric_val_subset$AttritionYes))
 print(glm_confm)
