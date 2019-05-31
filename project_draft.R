@@ -12,7 +12,8 @@ library(rlist)
 library(pROC)
 library(mlr)
 library(plotROC)
-library(boot)
+#library(boot)
+#library(hash)
 
 # ---------------- Data read -------------
 #setwd('C:/Users/Gabrysia/git_mow')
@@ -33,7 +34,8 @@ incomplete_count <- toString(sum(!complete.cases(dat)))
 print(paste("Incomplete cases:", incomplete_count, sep = " "))
 
 #Normalize continous values
-dat_normalized <- normalize(dat, method = "range", range = c(0, 1))
+
+#dat_normalized <- normalize(dat, method = "range", range = c(0, 1))
 
 ####
 split_ratio <- c(0.6, 0.2, 0.2)
@@ -48,6 +50,8 @@ temp_set <- dat[-tr_indices,]
 v_indices <- sample(seq_len(nrow(temp_set)), size = validation_set_size)
 validation_set  = temp_set[v_indices,]
 testing_set = temp_set[-v_indices,]
+
+rm(temp_set)
 
 
 
@@ -109,23 +113,41 @@ rf_best_accuracy <- c(0.0 )
 rf_best_trees_num <- NULL
 rf_best_confm <- NULL
 
+rf_models <- list()
+rf_predictions <- list()
+rf_conf_matrices <- list()
+rf_ROCs <- list()
+rf_descriptions <- list()
+
   for (t_num in trees_num){
     rf_model <- randomForest(formula = Attrition~., data = boruta_training, ntree = t_num)
     rf_pred_response <- predict(rf_model, boruta_validation, type = 'response')
     rf_confm <- caret::confusionMatrix(rf_pred_response, boruta_validation$Attrition)
     
+    rf_description <- (sprintf("Confusion matrix for random forest model with %s trees", t_num))
+    
     rf_pred_prob <- as.data.frame(predict(rf_model, boruta_validation, type = 'prob'))
     rf_roc <- roc(AttritionYes ~ rf_pred_prob$Yes, data = numeric_val_subset)
-    plot(rf_roc)
+    plot(rf_roc, main = rf_description, xlim = c(1,0), ylim = c(0,1))
+    
+    cat(rf_description)
+    print(rf_confm)
+    
+    rf_models[[length(rf_models)+1]] <- rf_model
+    rf_descriptions[[length(rf_descriptions)+1]] <- rf_description
+    rf_predictions[[length(rf_predictions)+1]] <- rf_pred_prob
+    rf_ROCs[[length(rf_ROCs)+1]] <- rf_roc
+    rf_conf_matrices[[length(rf_conf_matrices)+1]] <- rf_confm
+    
+    
+    cat(sprintf("Accuracy for model with %s features and %s trees: %s \n", features_num, t_num,rf_confm$overall['Accuracy']  ))
     
     if (rf_confm$overall['Accuracy'] > rf_best_accuracy){
       rf_best_accuracy <- rf_confm$overall['Accuracy']
       rf_best_trees_num <- c(t_num)
       rf_best_confm <- rf_confm
     }
-    #cat(sprintf("Confusion matrix for random forest model with %s features\n and %s trees", features_num t_num))
-    print(rf_confm)
-    cat(sprintf("Accuracy for model with %s features and %s trees: %s \n", features_num, t_num,rf_confm$overall['Accuracy']  ))
+    
   }
 
 cat(sprintf("Confusion matrix for the best random forest model with %s features, %s trees
@@ -133,17 +155,36 @@ cat(sprintf("Confusion matrix for the best random forest model with %s features,
 print(rf_best_confm)
 
 
+rf_summary <- list.zip("model" = rf_models,
+                        'description' = rf_descriptions,
+                        'predictions' = rf_predictions,
+                        'ROC' = rf_ROCs,
+                        'confusion_matrix' = rf_ROCs)
 
+rm(rf_models, rf_predictions, rf_descriptions, rf_ROCs, rf_model, rf_pred_response, rf_confm, rf_description,
+   rf_pred_prob, rf_roc)
 
 
 # -------------- GLM -----------------
 glm_model = glm(formula = AttritionYes~., data = numeric_tr_subset,family = binomial)
 glm_pred <- predict(glm_model, numeric_val_subset, type = 'response')
 glm_confm <- caret::confusionMatrix(table(round(glm_pred), numeric_val_subset$AttritionYes))
+
+glm_description <- "Logistic regression:"
+print(glm_description)
 print(glm_confm)
 
 glm_roc <- roc(AttritionYes ~ glm_pred, data = numeric_val_subset)
-plot(glm_roc, xlim=c(1,0), ylim = c(0,1))
+plot(glm_roc, main = glm_description, xlim=c(1,0), ylim = c(0,1))
+
+glm_summary <- c()
+glm_summary[["model"]] <- glm_model
+glm_summary[["description"]] <- glm_description
+glm_summary[["predictions"]] <- glm_pred
+glm_summary[["ROC"]] <- glm_roc
+glm_summary[["confusion_matrix"]] <- glm_confm
+
+rm(glm_model, glm_description, glm_pred, glm_roc, glm_confm)
 
 # -------------- ANN -  -----------------
 ann_training_desired_output <- subset(numeric_tr_subset, select = c(AttritionYes))
@@ -164,6 +205,7 @@ ann_model_1 <- RSNNS::mlp(x = ann_training_input,
                       initFuncParams = c(-0.3, 0.3),
                       learnFunc = "Std_Backpropagation",
                       linOut = FALSE)
+ann_model_description1 <- "MLP Model 1:"
 
 ann_model_2 <- RSNNS::mlp(x = ann_training_input,
                          y = ann_training_desired_output,
@@ -173,21 +215,29 @@ ann_model_2 <- RSNNS::mlp(x = ann_training_input,
                          initFuncParams = c(-0.3, 0.3),
                          learnFunc = "SCG",
                          linOut = FALSE)
+ann_model_description2 <- "MLP Model 2:"
+
 ann_predictions <- list()
 ann_conf_matrices <- list()
 ann_ROCs <- list()
 ann_models <- list(ann_model_1, ann_model_2)
+rm(ann_model_1, ann_model_2)
+
+ann_model_descriptions <- list(ann_model_description1, ann_model_description2)
+rm(ann_model_description1, ann_model_description2)
 
 
-
-for (model in ann_models){
+for (record in list.zip(model = ann_models, description = ann_model_descriptions)) {
   
-  ann_pred <- predict(ann_model_1, ann_validation_input)
-  list.append(ann_predictions, ann_pred)
+  model <- record[[1]]
+  model_description <- record[[2]]
   
-  ann_roc <- roc(AttritionYes ~ glm_pred, data = numeric_val_subset)
-  list.append(ann_ROCs, ann_roc)
-  plot(ann_roc)
+  ann_pred <- predict(model, ann_validation_input)
+  ann_predictions[[length(ann_predictions)+1]] <- ann_pred
+  
+  ann_roc <- roc(AttritionYes ~ ann_pred, data = numeric_val_subset)
+  ann_ROCs[[length(ann_ROCs)+1]] <- ann_roc
+  plot(ann_roc, main = model_description, xlim = c(1,0), ylim = c(0,1))
   
   ann_pred <- round(as.data.table(ann_pred))
   ann_pred$V1[ann_pred$V1 == 0] <- "No"
@@ -195,11 +245,22 @@ for (model in ann_models){
   ann_pred$V1 <- as.factor(ann_pred$V1)
   
   ann_confm <- caret::confusionMatrix(ann_pred$V1,  ann_validation_desired_output$AttritionYes)
+  
+  print(model_description)
   print(ann_confm)
-  list.append(ann_conf_matrices,  ann_confm)
+  ann_roc
+  ann_conf_matrices[[length(ann_conf_matrices)+1]] <- ann_confm
 
 }
 
+ann_summary <- list.zip("model" = ann_models,
+                        'description' = ann_model_descriptions,
+                        'predictions' = ann_predictions,
+                        'ROC' = ann_ROCs,
+                        'confusion_matrix' = ann_conf_matrices)
+
+rm(ann_training_desired_output, ann_training_input, ann_validation_desired_output, ann_validation_input,
+   ann_predictions, ann_conf_matrices, ann_ROCs, ann_models, ann_model_descriptions, ann_confm, ann_pred, ann_roc, model)
 
 
 
