@@ -16,9 +16,9 @@ library(plotROC)
 #library(hash)
 
 # ---------------- Data read -------------
-#setwd('C:/Users/Gabrysia/git_mow')
+setwd('C:/Users/Gabrysia/git_mow')
 #setwd('~/Studia/SEM2/MOW/Projekt/MOW')
-setwd('C:/Users/janikd01/Private/Studia/SEM2/MOW')
+#setwd('C:/Users/janikd01/Private/Studia/SEM2/MOW')
 
 set.seed(5993)
 
@@ -107,8 +107,7 @@ head(round(M,2))
 
 
 #----RANDOM FOREST PREDICTION----------------
-trees_num <- c(500, 700, 1500, 3000)
-features_num <- (ncol(boruta_training))
+trees_num <- c(400, 500, 600, 700, 1000, 1500, 3000)
 rf_best_accuracy <- c(0.0 )
 rf_best_trees_num <- NULL
 rf_best_confm <- NULL
@@ -120,11 +119,11 @@ rf_ROCs <- list()
 rf_descriptions <- list()
 
   for (t_num in trees_num){
-    rf_model <- randomForest(formula = Attrition~., data = boruta_training, ntree = t_num)
+    rf_model <- randomForest(formula = Attrition~., data = boruta_training, ntree = t_num, mtry = 11)
     rf_pred_response <- predict(rf_model, boruta_validation, type = 'response')
     rf_confm <- caret::confusionMatrix(rf_pred_response, boruta_validation$Attrition)
     
-    rf_description <- (sprintf("Confusion matrix for random forest model with %s trees", t_num))
+    rf_description <- (sprintf("Random forest: ntree = %s, mtry = 11", t_num))
     
     rf_pred_prob <- as.data.frame(predict(rf_model, boruta_validation, type = 'prob'))
     rf_roc <- roc(AttritionYes ~ rf_pred_prob$Yes, data = numeric_val_subset)
@@ -140,7 +139,7 @@ rf_descriptions <- list()
     rf_conf_matrices[[length(rf_conf_matrices)+1]] <- rf_confm
     
     
-    cat(sprintf("Accuracy for model with %s features and %s trees: %s \n", features_num, t_num,rf_confm$overall['Accuracy']  ))
+    cat(sprintf("Accuracy for model with %s trees: %s \n", t_num,rf_confm$overall['Accuracy']  ))
     
     if (rf_confm$overall['Accuracy'] > rf_best_accuracy){
       rf_best_accuracy <- rf_confm$overall['Accuracy']
@@ -150,8 +149,8 @@ rf_descriptions <- list()
     
   }
 
-cat(sprintf("Confusion matrix for the best random forest model with %s features, %s trees
-              \n Confusion matrix: \n", features_num, rf_best_trees_num))
+cat(sprintf("Confusion matrix for the best random forest model with %s trees\n", 
+            rf_best_trees_num))
 print(rf_best_confm)
 
 
@@ -199,8 +198,8 @@ ann_validation_input <- subset(numeric_val_subset, select = -c(AttritionYes))
 
 ann_model_1 <- RSNNS::mlp(x = ann_training_input,
                        y = ann_training_desired_output,
-                       size = c(4),
-                       maxit = 1000, 
+                       size = c(14),
+                       maxit = 1500, 
                       initFunc = "Randomize_Weights",
                       initFuncParams = c(-0.3, 0.3),
                       learnFunc = "Std_Backpropagation",
@@ -208,22 +207,42 @@ ann_model_1 <- RSNNS::mlp(x = ann_training_input,
 ann_model_description1 <- "MLP Model 1:"
 
 ann_model_2 <- RSNNS::mlp(x = ann_training_input,
+                          y = ann_training_desired_output,
+                          size = c(14),
+                          maxit = 1500, 
+                          initFunc = "Randomize_Weights",
+                          initFuncParams = c(-0.3, 0.3),
+                          learnFunc = "BackpropMomentum",
+                          linOut = FALSE)
+ann_model_description2 <- "MLP Model 2:"
+
+ann_model_3 <- RSNNS::mlp(x = ann_training_input,
                          y = ann_training_desired_output,
-                         size = c(4),
-                         maxit = 1000, 
+                         size = c(14),
+                         maxit = 1500, 
                          initFunc = "Randomize_Weights",
                          initFuncParams = c(-0.3, 0.3),
                          learnFunc = "SCG",
                          linOut = FALSE)
-ann_model_description2 <- "MLP Model 2:"
+ann_model_description3 <- "MLP Model 3:"
+
+ann_model_4 <- RSNNS::mlp(x = ann_training_input,
+                          y = ann_training_desired_output,
+                          size = c(14),
+                          maxit = 1500, 
+                          initFunc = "Randomize_Weights",
+                          initFuncParams = c(-0.3, 0.3),
+                          learnFunc = "BackpropWeightDecay",
+                          linOut = FALSE)
+ann_model_description4 <- "MLP Model 4:"
 
 ann_predictions <- list()
 ann_conf_matrices <- list()
 ann_ROCs <- list()
-ann_models <- list(ann_model_1, ann_model_2)
-rm(ann_model_1, ann_model_2)
+ann_models <- list(ann_model_1, ann_model_2, ann_model_3, ann_model_4)
+rm(ann_model_1, ann_model_2, ann_model_3, ann_model_4)
 
-ann_model_descriptions <- list(ann_model_description1, ann_model_description2)
+ann_model_descriptions <- list(ann_model_description1, ann_model_description2, ann_model_description3, ann_model_description4)
 rm(ann_model_description1, ann_model_description2)
 
 
